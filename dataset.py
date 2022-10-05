@@ -164,6 +164,53 @@ class TSSR_Dataset_x3(object):
 
     def __len__(self):
         return len(self.fn_lrimgs)
+    
+class SR_Dataset_x2(object):
+    def __init__(self, dir_lr=None, dir_hr=None, in_img_format='L', out_img_format='L', transforms=None,
+                 patch_size=48):
+
+        self.fn_lrimgs = []
+        self.fn_hrimgs = []
+
+        if dir_hr is not None:
+            for dir_hrs in dir_hr:
+                for ext in ['png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG']:
+                    self.fn_hrimgs += sorted(glob.glob('{}/*.{}'.format(dir_hrs, ext)))
+        if dir_lr is not None:
+            for dir_lrs in dir_lr:
+                for ext in ['png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG']:
+                    self.fn_lrimgs += sorted(glob.glob('{}/*.{}'.format(dir_lrs, ext)))
+
+        self.out_img_format = out_img_format
+        self.in_img_format = in_img_format
+        self.patch_size = patch_size
+        self.transforms = transforms
+        # self.random_rotate = [0, 90, 180, 270]
+
+        print(f"SR_LR_Data: {dir_lr}, {len(self.fn_lrimgs)}")
+        print(f"SR_HR_Data: {dir_hr}, {len(self.fn_hrimgs)}")
+
+    def __getitem__(self, idx):
+        
+        img_lr = None
+        img_hr = None
+        try:
+            img_lr = Image.open(self.fn_lrimgs[idx]).convert(self.in_img_format)
+            img_hr = Image.open(self.fn_hrimgs[idx]).convert(self.out_img_format)
+        except:
+            print(self.fn_lrimgs[idx])
+            print(self.fn_hrimgs[idx])
+            print("Cannot Get Image")
+            exit(1)
+
+        if self.transforms is not None:
+            img_hr = self.transforms(img_hr)
+            img_lr = self.transforms(img_lr)
+
+        return img_lr, img_hr
+
+    def __len__(self):
+        return len(self.fn_lrimgs)
 
 
 class SR_Dataset_x3(object):

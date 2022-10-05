@@ -21,7 +21,7 @@ from torch.autograd import Variable
 from utils import *
 from tqdm import tqdm
 
-from dataset import SR_Dataset, SR_Dataset_x3, SR_Dataset_x3_hrd, NR_Dataset, TSSR_Dataset_x3
+from dataset import SR_Dataset, SR_Dataset_x3, SR_Dataset_x3_hrd, NR_Dataset, TSSR_Dataset_x3, SR_Dataset_x2
 from model.sr_qat import SrNet, NrNet, NrNet_D
 from model.rcan import RCAN
 
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip', type=str, default='on', choices=['on', 'off'])
     parser.add_argument('--perchannel', type=str, choices=['on', 'off'])
     parser.add_argument('--patch_size', type=int, default=128)
-    parser.add_argument('--batch_size', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=6)
     parser.add_argument('--num_epochs', type=int, default=200)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--gamma_tv', type=float, default=1e-3)
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     parser.add_argument('--precision', type=str, default='single',
                         choices=('single', 'half'),
                         help='FP precision for test (single | half)')
-    parser.add_argument('--n_resgroups', type=int, default=10,
+    parser.add_argument('--n_resgroups', type=int, default=20,
                         help='number of residual groups')
     parser.add_argument('--reduction', type=int, default=16,
                         help='number of feature maps reduction')
@@ -170,7 +170,7 @@ if __name__ == '__main__':
     parserNR.add_argument('--precision', type=str, default='single',
                         choices=('single', 'half'),
                         help='FP precision for test (single | half)')
-    parserNR.add_argument('--n_resgroups', type=int, default=10,
+    parserNR.add_argument('--n_resgroups', type=int, default=20,
                         help='number of residual groups')
     parserNR.add_argument('--reduction', type=int, default=16,
                         help='number of feature maps reduction')
@@ -193,6 +193,10 @@ if __name__ == '__main__':
     opt.dir_hr = [root_dir + '/hr/']
     opt.dir_lr = [root_dir + '/lr/']
     opt.dir_hlr = [root_dir + '/hlr/']
+    
+    root_eval_dir = './test'
+    eval_dir_hr = [root_eval_dir + '/hr/']
+    eval_dir_lr = [root_eval_dir + '/lr/']
 
     if opt.perchannel == 'on':
         opt.perchannel = True
@@ -237,70 +241,62 @@ if __name__ == '__main__':
     net_out_ch = 1 if opt.out_format == 'L' else 3
 
     print("RF model created")
-    #model_NR = NrNet(ch_in=net_inp_ch, ch_out=net_out_ch, ch=opt.ch, skip=opt.skip, scale=1).to(device)
-    #model_SR = SrNet(ch_in=net_inp_ch, ch_out=net_out_ch, ch=opt.ch, skip=opt.skip, scale=opt.scale).to(device)
-    model_NR = RCAN(args=optNR).to(device)
     model_SR = RCAN(args=opt).to(device)
 
-    opt_model_NR = optim.Adam(model_NR.parameters(), lr=opt.lr)
     opt_model_SR = optim.Adam(model_SR.parameters(), lr=opt.lr)
-    dataset = SR_Dataset_x3(dir_hr=opt.dir_hr, dir_lr=opt.dir_lr, dir_su = opt.dir_hlr, in_img_format=opt.in_format,
+    dataset = SR_Dataset_x2(dir_hr=opt.dir_hr, dir_lr=opt.dir_lr, in_img_format=opt.in_format,
                             out_img_format=opt.out_format, transforms=transforms_train, patch_size=opt.patch_size)
     dataloader = DataLoader(dataset=dataset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.workers,
                             pin_memory=True, drop_last=True)
-    print("Data loading completed")
+    
+    eval_dataset = SR_Dataset_x2(dir_hr=eval_dir_hr, dir_lr=eval_dir_lr, in_img_format=opt.in_format,
+                            out_img_format=opt.out_format, transforms=transforms_train, patch_size=opt.patch_size)
+    eval_dataloader = DataLoader(dataset=eval_dataset, batch_size=opt.batch_size, shuffle=False, num_workers=opt.workers,
+                            pin_memory=True, drop_last=True)
 
-    epoch_loss_NR = AverageMeter()
+    
+    # model_SR.load_state_dict(torch.load('result/train/weight_RF_SD_None/epoch_SR_000_41800.pth', map_location=device))
+    
+    print("Data loading completed")
+    
+    print("Opening sheet")
+    sheet = open_sheet()
+
     epoch_loss_SR = AverageMeter()
 
     n_mix = 0
-
+    
+    avg_psnr = 0
     for epoch in range(opt.num_epochs + 1):
-        model_NR.train()
+        # model_NR.train()
         model_SR.train()
         with tqdm(total=(len(dataset) - len(dataset) % opt.batch_size)) as _tqdm:
             _tqdm.set_description('epoch: {:3d}/{}'.format(epoch + 1, opt.num_epochs))
-            for idx, (lr, hr, hlr) in enumerate(dataloader):
+            for idx, (lr, hr) in enumerate(dataloader):
                 lr = lr.to(device)
                 hr = hr.to(device)
-                hlr = hlr.to(device)
-
-                # print(lr[0].size())
-                # print(hr[0].size())
-                #
-                opt_model_NR.zero_grad()
-                nr = model_NR(lr)
-
-                # Calculate Pixel Loss - Generator
-
-                # Calculate Dist Loss
-                # HQ_features = get_features(hr, model, True)
-                # LQ_features = get_features(lr, model, False)
-                # loss_Dist = self_dist_loss(HQ_features, LQ_features)
-                loss_NR = criterion(nr, hlr)
-
-                # loss = loss_NR
-                loss_NR.backward()
-                opt_model_NR.step()
-
                 opt_model_SR.zero_grad()
-                sr = model_SR(hlr)
+                sr = model_SR(lr)
                 loss_SR = criterion(sr, hr)
                 loss_SR.backward()
-
+                
                 opt_model_SR.step()
-
-                epoch_loss_NR.update(loss_NR.item(), len(lr))
                 epoch_loss_SR.update(loss_SR.item(), len(lr))
-                # epoch_loss_Dist.update(loss_Dist.item(), len(lr))
-
-                _tqdm.set_postfix_str(s=f'NR: {epoch_loss_NR.avg:.6f}, SR: {epoch_loss_SR.avg:.6f}')
+                
+                if idx%8000 == 0:
+                    torch.save(model_SR.state_dict(), os.path.join(opt.dir_out, f'epoch_SR_{(epoch):03d}_{idx:05d}.pth'))
+                if idx%1000 == 0:
+                    avg_psnr = test_model_SR(model_SR, device, eval_dataloader, epoch, idx)
+                    sendSpreadsheet(sheet, avg_psnr, epoch, idx)                    
+                    model_SR.train()
+                    
+                _tqdm.set_postfix_str(s=f'SR: {epoch_loss_SR.avg:.6f} PSNR: {avg_psnr:.3f}')
                 _tqdm.update(len(lr))
 
-        writer.add_scalar('NR.', epoch_loss_NR.avg, epoch + 1)
+        # writer.add_scalar('NR.', epoch_loss_NR.avg, epoch + 1)
         writer.add_scalar('SR.', epoch_loss_SR.avg, epoch + 1)
 
-        if epoch % 1 == 0:
-            torch.save(model_NR.state_dict(), os.path.join(opt.dir_out, f'epoch_NR_{(epoch):03d}.pth'))
-            torch.save(model_SR.state_dict(), os.path.join(opt.dir_out, f'epoch_SR_{(epoch):03d}.pth'))
+        # if epoch % 1 == 0:
+        #     # torch.save(model_NR.state_dict(), os.path.join(opt.dir_out, f'epoch_NR_{(epoch):03d}.pth'))
+        #     torch.save(model_SR.state_dict(), os.path.join(opt.dir_out, f'epoch_SR_{(epoch):03d}.pth'))
         writer.close()

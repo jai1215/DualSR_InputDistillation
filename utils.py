@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from torchvision import transforms
 from PIL import Image
 import cv2
+import time
 
 
 class SelfDistLoss():
@@ -570,3 +571,84 @@ def print_size_of_model(model):
 #     model.load_state_dict(state_dict)
 #     model.to('cpu')
 #     return model
+
+from torchvision.utils import save_image
+eval_images = [
+'7040137',
+'0000016',
+'0001387',
+'0002651',
+'9001637',
+'9022511',
+'9045230',
+'3004504',
+'5022167',
+'6005219',
+'1015645',
+]
+
+import math
+
+def psnr(imgA, imgB):
+    rmse = torch.mean((imgA-imgB)**2)
+    if rmse == 0:
+        return 100
+    return -10 * math.log10(rmse)
+
+def test_model_SR(model_SR, device, dataloader, epoch, idx):
+    avg_psnr = 0
+    test_cnt = 0
+    with torch.no_grad():
+        model_SR.eval()
+        for i, (lr, hr) in enumerate(dataloader):
+            lr = lr.to(device)
+            hr = hr.to(device)
+            sr = model_SR(lr)
+            
+            batch = lr.shape[0]
+            for j in range(batch):
+                if ((epoch==0) & (idx ==0)):
+                    save_image(hr.data[j], f'./result/images/img{i*batch+j:02d}_hr.png')
+                save_image(sr.data[j], f'./result/images/img{i*batch+j:02d}_ep{epoch:03d}_iter{idx:05d}_sr.png')
+                avg_psnr += psnr(hr.data[j], sr.data[j])
+                test_cnt += 1
+    return avg_psnr / test_cnt
+
+
+#Send spreadsheet
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from gspread_formatting import set_row_height
+from gspread_formatting import set_column_width
+
+def getToday():
+    now = time.localtime()
+    # ret = f"{(now.tm_year%100):02d}_"
+    ret = f"{now.tm_mon:02d}_{now.tm_mday:02d}_{now.tm_hour:02d}{now.tm_min:02d}{now.tm_sec:02d}"
+    return ret
+
+def open_sheet():
+    scope = [
+    'https://spreadsheets.google.com/feeds',
+    'https://www.googleapis.com/auth/drive',
+    ]
+    json_file_name = './web/key_jai1215.json'
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(json_file_name, scope)
+    gc = gspread.authorize(credentials)
+    spreadsheet_url = 'https://docs.google.com/spreadsheets/d/1Q0UWSaFntGywHBUYwi8qG_vwlNBBOE1cmO7VqSL_U-8/edit#gid=0'
+    doc = gc.open_by_url(spreadsheet_url)
+    today = getToday()
+    sheet = doc.add_worksheet(title=today, rows="100", cols="20")
+    sheet.append_row(['EPOCH', 'IDX', 'PSNR', 'IMG', "HD_IMG"])
+    # set_row_height(sheet, '2:1000', 512)
+    set_column_width(sheet, 'D:E', 512)
+    return sheet
+
+def sendSpreadsheet(sheet, avg_psnr,epoch,idx):
+    url = 'http://147.47.125.235:9087/image/'
+    img_str = f'{url}img00_ep{epoch:03d}_iter{idx:05d}_sr.png'
+    # img = f'=image("{img_str}")'
+    # img_ori = f'=image("{url}img00_hr.png")'
+    img = img_str
+    img_ori = f'{url}img00_hr.png'
+    sheet.append_row([epoch, idx, avg_psnr, img, img_ori])

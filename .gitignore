@@ -1,3 +1,9 @@
+runs/*
+result/*
+*.png
+youtubedb
+web/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
