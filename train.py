@@ -99,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip', type=str, default='on', choices=['on', 'off'])
     parser.add_argument('--perchannel', type=str, choices=['on', 'off'])
     parser.add_argument('--patch_size', type=int, default=128)
-    parser.add_argument('--batch_size', type=int, default=6)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_epochs', type=int, default=200)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--gamma_tv', type=float, default=1e-3)
@@ -122,7 +122,7 @@ if __name__ == '__main__':
                         help='pre-trained model directory')
     parser.add_argument('--extend', type=str, default='.',
                         help='pre-trained model directory')
-    parser.add_argument('--n_resblocks', type=int, default=10,
+    parser.add_argument('--n_resblocks', type=int, default=6,
                         help='number of residual blocks')
     parser.add_argument('--n_feats', type=int, default=64,
                         help='number of feature maps')
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     parser.add_argument('--precision', type=str, default='single',
                         choices=('single', 'half'),
                         help='FP precision for test (single | half)')
-    parser.add_argument('--n_resgroups', type=int, default=20,
+    parser.add_argument('--n_resgroups', type=int, default=10,
                         help='number of residual groups')
     parser.add_argument('--reduction', type=int, default=16,
                         help='number of feature maps reduction')
@@ -251,12 +251,11 @@ if __name__ == '__main__':
     
     eval_dataset = SR_Dataset_x2(dir_hr=eval_dir_hr, dir_lr=eval_dir_lr, in_img_format=opt.in_format,
                             out_img_format=opt.out_format, transforms=transforms_train, patch_size=opt.patch_size)
-    eval_dataloader = DataLoader(dataset=eval_dataset, batch_size=opt.batch_size, shuffle=False, num_workers=opt.workers,
+    eval_dataloader = DataLoader(dataset=eval_dataset, batch_size=12, shuffle=False, num_workers=opt.workers,
                             pin_memory=True, drop_last=True)
-
     
-    # model_SR.load_state_dict(torch.load('result/train/weight_RF_SD_None/epoch_SR_000_41800.pth', map_location=device))
     
+    model_SR.load_state_dict(torch.load('result/train/weight_RF_SD_None/epoch_SR_023_00000.pth', map_location=device))
     print("Data loading completed")
     
     print("Opening sheet")
@@ -267,7 +266,7 @@ if __name__ == '__main__':
     n_mix = 0
     
     avg_psnr = 0
-    for epoch in range(opt.num_epochs + 1):
+    for epoch in range(24, opt.num_epochs + 1):
         # model_NR.train()
         model_SR.train()
         with tqdm(total=(len(dataset) - len(dataset) % opt.batch_size)) as _tqdm:
