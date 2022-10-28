@@ -651,4 +651,7 @@ def sendSpreadsheet(sheet, avg_psnr,epoch,idx):
     # img_ori = f'=image("{url}img00_hr.png")'
     img = img_str
     img_ori = f'{url}img00_hr.png'
-    sheet.append_row([epoch, idx, avg_psnr, img, img_ori])
+    try:
+        sheet.append_row([epoch, idx, avg_psnr, img, img_ori])
+    except:
+        print("sendSpreadsheet failed because of exception")

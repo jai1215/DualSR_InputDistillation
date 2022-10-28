@@ -255,7 +255,7 @@ if __name__ == '__main__':
                             pin_memory=True, drop_last=True)
     
     
-    model_SR.load_state_dict(torch.load('result/train/weight_RF_SD_None/epoch_SR_023_00000.pth', map_location=device))
+    model_SR.load_state_dict(torch.load('result/train/weight_RF_SD_None/epoch_SR_041_16000.pth', map_location=device))
     print("Data loading completed")
     
     print("Opening sheet")
@@ -266,7 +266,7 @@ if __name__ == '__main__':
     n_mix = 0
     
     avg_psnr = 0
-    for epoch in range(24, opt.num_epochs + 1):
+    for epoch in range(42, opt.num_epochs + 1):
         # model_NR.train()
         model_SR.train()
         with tqdm(total=(len(dataset) - len(dataset) % opt.batch_size)) as _tqdm:
@@ -291,6 +291,8 @@ if __name__ == '__main__':
                     
                 _tqdm.set_postfix_str(s=f'SR: {epoch_loss_SR.avg:.6f} PSNR: {avg_psnr:.3f}')
                 _tqdm.update(len(lr))
+            for g in opt_model_SR.param_groups:
+                g['lr'] = g['lr'] * 0.7
 
         # writer.add_scalar('NR.', epoch_loss_NR.avg, epoch + 1)
         writer.add_scalar('SR.', epoch_loss_SR.avg, epoch + 1)
